@@ -11,7 +11,12 @@ class entutil(object):
     """docstring for entutil"""
 
     # constructor
-    def __init__(self, ez_mode = False):
+    def __init__(self, mode = 1):
+        """
+        mode 1: <s> is used for bigram and trigram, but not for unigram
+        mode 2: one <s> is inserted before the sentence, and one </s> inserted after
+        mode 3: two <s>s inserted before, and one </s> after
+        """
         # ngrams count
         self.uni = {}
         self.bi = {}
@@ -20,15 +25,17 @@ class entutil(object):
         self.uni_s = {}
         self.bi_s = {}
         self.tri_s = {}
-        # vocabulary 
+        # vars 
         self.token_N = 0 # count of pure tokens
         self.uni_N = 0 # count of all unigrams
         self.bi_N = 0  # count of all bigrams
         self.tri_N = 0 # count of all trigrams
-        self.s_N = 0 # number of sentences
-        self.ez_mode = ez_mode
         self.V = ['UNK']
         self.first_unkown = [] # the word appeared first time will be here, while preparing the vocabulary
+        # mode and mode-specific vars
+        self.mode = mode
+        if mode == 1:
+            self.s_N = 0 # record the number of training sentences
 
     # prepares the vocabulary
     def prepV(self, tokens):
@@ -44,20 +51,28 @@ class entutil(object):
     def train(self, tokens):
         # replace unkown words with 'UNK'
         tokens = ['UNK' if t not in self.V else t for t in tokens]
-        # decide if adding <s> and </s>
-        if not self.ez_mode:
-            tokens = ['<s>', '<s>'] + tokens # add a start symbol
-            tokens.append('</s>')
-        else:
+        # decide based on mode
+        if self.mode == 1:
             tokens = ['<s>'] + tokens
+        if self.mode == 2:
+            tokens = ['<s>'] + tokens
+            tokens.append('</s>')
+        if self.mode == 3:
+            tokens = ['<s>', '<s>'] + tokens
+            tokens.append('</s>')
         # train unigram
-        for key in tokens:
-            if key not in ['<s>', '</s>']:
-                self.uni_N += 1
+        if self.mode == 1:
+            for key in tokens:
+                if key != '<s>':
+                    self.uni_N += 1
+                    self.uni.setdefault(key, 0)
+                    self.uni[key] += 1
+                else:
+                    self.s_N += 1
+        else:
+            for key in tokens:
                 self.uni.setdefault(key, 0)
                 self.uni[key] += 1
-            elif key == '<s>':
-                self.s_N += 1
         # train bigram
         bi_tokens = list(ngrams(tokens, 2))
         for tup in bi_tokens:
@@ -83,10 +98,10 @@ class entutil(object):
         self.bi_s = self.bi.copy()
         for key, val in self.bi_s.iteritems():
             uni_key = key.split()[0]
-            if uni_key != '<s>':
-                uni_val = self.uni_s[uni_key]
-            else:
+            if uni_key == '<s>' and self.mode == 1:
                 uni_val = self.s_N
+            else:
+                uni_val = self.uni_s[uni_key]
             new_val = float(val + 1) * uni_val / (uni_val + len(self.V))
             self.bi_s[key] = new_val
         # smoothing trigram
