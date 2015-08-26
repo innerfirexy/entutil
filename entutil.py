@@ -147,7 +147,7 @@ class entutil(object):
             bi_dict = self.bi
             tri_dict = self.tri
         # compute
-        if self.mode = 1: # mode 1
+        if self.mode == 1: # mode 1
             for i, t in enumerate(tokens):
                 # if it is the first word, compute the unigram and the bigram, t1 = <s>
                 if i == 0:
