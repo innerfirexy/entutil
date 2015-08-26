@@ -21,21 +21,27 @@ class entutil(object):
         self.uni = {}
         self.bi = {}
         self.tri = {}
+
         # smoothed ngrams count
         self.uni_s = {}
         self.bi_s = {}
         self.tri_s = {}
-        # vars 
+
+        # N vars 
         self.token_N = 0 # count of pure tokens
         self.uni_N = 0 # count of all unigrams
         self.bi_N = 0  # count of all bigrams
         self.tri_N = 0 # count of all trigrams
-        self.V = ['UNK']
+
         self.first_unkown = [] # the word appeared first time will be here, while preparing the vocabulary
+
         # mode and mode-specific vars
         self.mode = mode
         if mode == 1:
             self.s_N = 0 # record the number of training sentences
+            self.V = ['UNK']
+        else:
+            self.V = ['UNK', '<s>', '</s>']
 
     # prepares the vocabulary
     def prepV(self, tokens):
@@ -54,14 +60,14 @@ class entutil(object):
         # decide based on mode
         if self.mode == 1:
             tokens = ['<s>'] + tokens
-        if self.mode == 2:
+        elif self.mode == 2:
             tokens = ['<s>'] + tokens
             tokens.append('</s>')
-        if self.mode == 3:
+        elif self.mode == 3:
             tokens = ['<s>', '<s>'] + tokens
             tokens.append('</s>')
         # train unigram
-        if self.mode == 1:
+        if self.mode == 1: # in mode 1, <s> and </s> are not included in unigrams
             for key in tokens:
                 if key != '<s>':
                     self.uni_N += 1
@@ -122,8 +128,13 @@ class entutil(object):
             return float('nan')
         # replace unkown tokens
         tokens = ['UNK' if t not in self.V else t for t in tokens]
-        # decide if adding <s> and </s>
-        if not self.ez_mode:
+        # add <s> and </s> by mode
+        if self.mode == 1:
+            pass
+        elif self.mode == 2:
+            tokens = ['<s>'] + tokens
+            tokens.append('</s>')
+        elif self.mode == 3:
             tokens = ['<s>', '<s>'] + tokens
             tokens.append('</s>')
         # decide the ngrams to be used
@@ -136,7 +147,7 @@ class entutil(object):
             bi_dict = self.bi
             tri_dict = self.tri
         # compute
-        if self.ez_mode: # ez mode
+        if self.mode = 1: # mode 1
             for i, t in enumerate(tokens):
                 # if it is the first word, compute the unigram and the bigram, t1 = <s>
                 if i == 0:
@@ -197,8 +208,44 @@ class entutil(object):
                     p = lambda1 * pt + lambda2 * pb + (1 - lambda1 - lambda2) * pu
                     H = math.log(p, 2)
             return - H / len(tokens)
-        else:
-            for i, t in enumerate(tokens[2:]): # skip the first two <s>
+        elif self.mode == 2: # mode 2
+            for i, t in enumerate(tokens[1:]): # skip the first <s>
+                t1 = tokens[i-1]
+                if i == 0: # for the first word, compute only the pu and pb, because it does not form a trigram
+                    pu = float(uni_dict[t]) / self.uni_N
+                    bi_key = ' '.join((t1, t))
+                    if bi_key in bi_dict:
+                        pb = float(bi_dict[bi_key]) / uni_dict[t1]
+                    else:
+                        pb = 1.0 / (uni_dict[t1] + len(self.V))
+                    # interpolation
+                    p = (lambda1 + lambda2) * pb + (1 - lambda1 - lambda2) * pu
+                    H += math.log(p, 2)
+                else: # for the words beyond the second one, compute the pu, pb, and pt
+                    t2 = tokens[i-2]
+                    # unigram prob
+                    pu = float(uni_dict[t]) / self.uni_N
+                    # bigram prob
+                    bi_key = ' '.join((t1, t))
+                    if bi_key in bi_dict:
+                        pb = float(bi_dict[bi_key]) / uni_dict[t1]
+                    else: # use add-one smooth
+                        pb = 1.0 / (uni_dict[t1] + len(self.V))
+                    # trigram prob
+                    bi_key = ' '.join((t2, t1))
+                    tri_key = ' '.join((t2, t1, t))
+                    if tri_key in tri_dict:
+                        pt = float(tri_dict[tri_key]) / bi_dict[bi_key]
+                    elif bi_key in bi_dict: # only needs to smooth the trigram term
+                        pt = 1.0 / (bi_dict[bi_key] + len(self.V))
+                    else: # needs to smooth both bigram and trigram terms
+                        pt = 1.0 / (1.0 * uni_dict[t2] / (uni_dict[t2] + len(self.V)) + len(self.V))
+                    # interpolation
+                    p = lambda1 * pt + lambda2 * pb + (1 - lambda1 - lambda2) * pu
+                    H += math.log(p, 2)
+            return - H / (len(tokens))
+        elif self.mode == 3: # mode 3, 
+            for i, t in enumerate(tokens[2:]): # skip the first two <s>s
                 t1 = tokens[i-1]
                 t2 = tokens[i-2]
                 # unigram prob
@@ -221,20 +268,28 @@ class entutil(object):
                 # interpolation
                 p = lambda1 * pt + lambda2 * pb + (1 - lambda1 - lambda2) * pu
                 H += math.log(p, 2)
-            return - H / (len(tokens) - 2) # exclude the two <s>
+            return - H / (len(tokens))
+
 
     # resets all dicts
     def reset(self):
         self.uni = {}
         self.bi = {}
         self.tri = {}
+
         self.uni_s = {}
         self.bi_s = {}
         self.tri_s = {}
+
         self.token_N = 0
         self.uni_N = 0
         self.bi_N = 0
         self.tri_N = 0
-        self.s_N = 0
-        self.V = ['UNK']
+
         self.first_unkown = []
+
+        if self.mode == 1:
+            self.s_N = 0
+            self.V = ['UNK']
+        else:
+            self.V = ['UNK', '<s>', '</s>']
