@@ -77,6 +77,7 @@ class entutil(object):
                     self.s_N += 1
         else:
             for key in tokens:
+                self.uni_N += 1
                 self.uni.setdefault(key, 0)
                 self.uni[key] += 1
         # train bigram
